@@ -35,6 +35,15 @@ def webhook():
         return jsonify({"error": "Invalid or missing JSON"}), 400
     logging.info(f"Received webhook: {data}")
 
+<<<<<<< HEAD
+    event_type = data.get("extra", {}).get("event", "UNKNOWN")
+
+    # Allow TEST events to pass without needing full fields
+    if event_type == "TEST":
+        return jsonify({"status": "test received"}), 200
+
+=======
+>>>>>>> 94a9ba808d758519d3e055452e34a8ed12067e88
     # Default fallback values
     title = "🎯 cross-seed match injected!"
     body = "**Status:** ✅ injection successful"
