@@ -4,9 +4,10 @@ curl -X POST "http://localhost:5000/webhook" \
 -d '{
   "extra": {
     "result": "INJECTED",
-    "trackers": ["Aither", "Blutopia", "FileList"],
+    "name": "Suits.L.A.S01E10.Slugfest.1080p",
+    "trackers": ["Blutopia", "FileList", "Aither"],
     "searchee": {
-      "path": "Suits.L.A.S01E10.Slugfest.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX.mkv"
+      "path": "Suits.L.A.S01E10.Slugfest.1080p.mkv"
     }
   }
 }'

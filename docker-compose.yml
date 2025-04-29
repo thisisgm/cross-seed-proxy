@@ -1,8 +1,7 @@
-
 version: '3'
 services:
   cross-seed-proxy:
-    build: .
+    image: thisisgm/cross-seed-proxy:latest
     container_name: cross-seed-proxy
     ports:
       - "5000:5000"
@@ -13,8 +12,8 @@ services:
       - TZ=Etc/UTC
     restart: unless-stopped
     networks:
-      - crossseed_network
+      - docker
 
 networks:
-  crossseed_network:
+  docker:
     external: true

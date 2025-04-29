@@ -4,9 +4,10 @@ curl -X POST "http://localhost:5000/webhook" \
 -d '{
   "extra": {
     "result": "FAILURE",
-    "trackers": ["Aither", "Blutopia"],
+    "name": "House.M.D.S02E01.1080p",
+    "trackers": ["Blutopia", "TorrentLeech"],
     "searchee": {
-      "path": "Some.Failed.Torrent.Name.1080p"
+      "path": "House.M.D.S02E01.1080p.mkv"
     }
   }
 }'
