@@ -118,12 +118,7 @@ if _otel_enabled:
 else:
     app = Flask(__name__)
 
-APPRISE_URL = os.getenv("APPRISE_URL", "http://apprise-api:8000/notify/crossseed")
-ICON_URL = os.getenv("ICON_URL", "https://raw.githubusercontent.com/cross-seed/cross-seed.org/master/static/img/cross-seed.png")
-AUTH_TOKEN = os.getenv("AUTH_TOKEN")
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+APPRISE_URL = "http://apprise-api:8000/notify/crossseed"
 
 startup_time = time()
 
@@ -157,78 +152,20 @@ metrics = {
 }
 
 def auth_required(f):
+    # Decorator does nothing; all endpoints are public.
     @wraps(f)
     def decorated(*args, **kwargs):
-        if AUTH_TOKEN is None:
-            return f(*args, **kwargs)
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return jsonify({"error": "Forbidden", "request_id": g.request_id}), 403
-        token = auth_header[len('Bearer '):].strip()
-        if token != AUTH_TOKEN:
-            return jsonify({"error": "Forbidden", "request_id": g.request_id}), 403
         return f(*args, **kwargs)
     return decorated
 
-def send_slack_fallback(message: str):
-    if not SLACK_WEBHOOK_URL:
-        logging.warning("Slack fallback webhook URL not configured.", extra={"request_id": g.request_id})
-        return False
-    payload = {"text": message}
-    try:
-        resp = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=5)
-        if 200 <= resp.status_code < 300:
-            logging.info("Slack fallback notification sent successfully.", extra={"request_id": g.request_id})
-            return True
-        else:
-            logging.error(f"Slack fallback returned status code {resp.status_code}", extra={"request_id": g.request_id})
-            return False
-    except requests.RequestException as e:
-        logging.error(f"Failed to send Slack fallback notification: {e}", extra={"request_id": g.request_id})
-        return False
 
-def send_telegram_fallback(message: str):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logging.warning("Telegram fallback bot token or chat ID not configured.", extra={"request_id": g.request_id})
-        return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=5)
-        if 200 <= resp.status_code < 300:
-            logging.info("Telegram fallback notification sent successfully.", extra={"request_id": g.request_id})
-            return True
-        else:
-            logging.error(f"Telegram fallback returned status code {resp.status_code}", extra={"request_id": g.request_id})
-            return False
-    except requests.RequestException as e:
-        logging.error(f"Failed to send Telegram fallback notification: {e}", extra={"request_id": g.request_id})
-        return False
 
 def send_discord_notification(title: str, description: str, emoji: str, color: int, log_data: dict):
     title_with_emoji = f"{emoji} {title}"
-    embed = {
-        "author": {
-            "name": title_with_emoji,
-            "icon_url": ICON_URL
-        },
-        "description": description,
-        "color": color,
-        "timestamp": datetime.utcnow().isoformat()
-    }
     payload = {
-        "embeds": [embed]
+        "title": title_with_emoji,
+        "body": description
     }
-
-    # Check for optional dynamic channel routing header
-    thread_id = request.headers.get('X-Discord-Thread-ID')
-    if thread_id:
-        # Apprise may not natively support thread_id, but we include it in payload for custom handling
-        payload['thread_id'] = thread_id
 
     log_data["request_id"] = g.request_id
     logging.info(log_data)
@@ -252,9 +189,6 @@ def send_discord_notification(title: str, description: str, emoji: str, color: i
     else:
         logging.error(f"Failed to send notification after 3 attempts, final status code: {status_code}", extra={"request_id": g.request_id})
         metrics["failed_sends"] += 1
-        fallback_message = f"{title_with_emoji}\n{description}"
-        send_slack_fallback(fallback_message)
-        send_telegram_fallback(fallback_message)
 
     return status_code
 
@@ -472,8 +406,7 @@ def debug():
     current_time = time()
     uptime_seconds = current_time - startup_time
     sanitized_config = {
-        "APPRISE_URL": mask_url(APPRISE_URL),
-        "ICON_URL": ICON_URL
+        "APPRISE_URL": mask_url(APPRISE_URL)
     }
     debug_info = {
         "uptime_seconds": uptime_seconds,

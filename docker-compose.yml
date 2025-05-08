@@ -1,4 +1,5 @@
-version: '3'
+version: '3.8'
+
 services:
   cross-seed-proxy:
     image: thisisgm/cross-seed-proxy:latest
@@ -6,14 +7,5 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - PUID=1000
-      - PGID=1000
-      - UMASK=002
       - TZ=Etc/UTC
     restart: unless-stopped
-    networks:
-      - docker
-
-networks:
-  docker:
-    external: true
