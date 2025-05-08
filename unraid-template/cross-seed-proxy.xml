@@ -1,0 +1,22 @@
+<Container version="2">
+  <Name>cross-seed-proxy</Name>
+  <Repository>thisisgm/cross-seed-proxy:latest</Repository>
+  <Registry>https://hub.docker.com/r/thisisgm/cross-seed-proxy</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/thisisgm/cross-seed-proxy/issues</Support>
+  <Project>https://github.com/thisisgm/cross-seed-proxy</Project>
+  <Overview>Lightweight Flask-based webhook proxy for qbitmanage and cross-seed. Sends clean alerts to Apprise, Discord, or Notifiarr. No config, .env, or secrets needed — just works.</Overview>
+  <Category>Tools: Network</Category>
+  <WebUI>http://[IP]:[PORT:5000]</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/thisisgm/cross-seed-proxy/main/icon.png</Icon>
+  <ExtraParams>--hostname=cross-seed-proxy.internal --cap-add=NET_ADMIN --sysctl="net.ipv4.conf.all.src_valid_mark=1" --sysctl="net.ipv6.conf.all.disable_ipv6=1"</ExtraParams>
+
+  <Config Name="Port" Target="5000" Default="5000" Mode="tcp" Description="Internal web service port." Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="PUID" Target="PUID" Default="1000" Mode="" Description="User ID for file access." Type="Variable" Display="always" Required="false" Mask="false">1000</Config>
+  <Config Name="PGID" Target="PGID" Default="1000" Mode="" Description="Group ID for file access." Type="Variable" Display="always" Required="false" Mask="false">1000</Config>
+  <Config Name="UMASK" Target="UMASK" Default="002" Mode="" Description="Umask value for permissions." Type="Variable" Display="always" Required="false" Mask="false">002</Config>
+  <Config Name="TZ" Target="TZ" Default="America/Santo_Domingo" Mode="" Description="Timezone for logs." Type="Variable" Display="always" Required="false" Mask="false">America/Santo_Domingo</Config>
+</Container>
