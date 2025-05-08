@@ -8,31 +8,6 @@ from datetime import datetime
 from functools import wraps
 import uuid
 import json
-def get_client_ip():
-    """Returns the real client IP address, handling X-Forwarded-For if present."""
-    xff = request.headers.get('X-Forwarded-For', '')
-    if xff:
-        # X-Forwarded-For may be a comma-separated list of IPs; the first is the real client
-        real_ip = xff.split(',')[0].strip()
-        proxy_ip = request.remote_addr
-        return real_ip, proxy_ip
-    return request.remote_addr, None
-
-# --- Optional .env loading via python-dotenv ---
-_dotenv_loaded = False
-try:
-    from dotenv import load_dotenv
-    _dotenv_loaded = load_dotenv()
-    if _dotenv_loaded:
-        logging.basicConfig(level=logging.INFO)
-        logging.info("Loaded environment variables from .env file.", extra={"request_id": "N/A"})
-    else:
-        logging.basicConfig(level=logging.INFO)
-        logging.info("No .env file found or already loaded, skipping dotenv.", extra={"request_id": "N/A"})
-except ImportError:
-    # python-dotenv not installed; skip loading .env
-    pass
-
 
 
 # --- Logging setup function ---
@@ -94,29 +69,8 @@ def setup_logging():
 # --- Call logging setup after dotenv loading, before anything else ---
 setup_logging()
 
-# --- Optional OpenTelemetry distributed tracing support ---
-# If OTEL environment variables are set, attempt to instrument Flask app
-_otel_enabled = (
-    os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    or os.getenv("OTEL_TRACES_EXPORTER")
-    or os.getenv("OTEL_SERVICE_NAME")
-)
-if _otel_enabled:
-    try:
-        from opentelemetry.instrumentation.flask import FlaskInstrumentor
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-        # Users are expected to configure exporters via OTEL env vars.
-        trace.set_tracer_provider(TracerProvider())
-        app = Flask(__name__)
-        FlaskInstrumentor().instrument_app(app)
-        logging.info("OpenTelemetry tracing enabled for Flask app.", extra={"request_id": "N/A"})
-    except ImportError:
-        app = Flask(__name__)
-        logging.warning("OpenTelemetry tracing requested via environment, but opentelemetry packages not installed.", extra={"request_id": "N/A"})
-else:
-    app = Flask(__name__)
+
+app = Flask(__name__)
 
 APPRISE_URL = "http://apprise-api:8000/notify/crossseed"
 
@@ -135,15 +89,6 @@ SUMMARY_LOOKUP = {
     "SAVED": "Torrent saved for manual review.",
     "UNKNOWN": "Event status unknown.",
 }
-
-
-def auth_required(f):
-    # Decorator does nothing; all endpoints are public.
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        return f(*args, **kwargs)
-    return decorated
-
 
 
 def send_discord_notification(title: str, description: str, emoji: str, color: int, log_data: dict):
@@ -196,14 +141,11 @@ def webhook():
         return jsonify({"error": "Invalid or missing JSON", "request_id": g.request_id}), 400
 
     event_type = data.get("extra", {}).get("event", "UNKNOWN")
-    real_ip, proxy_ip = get_client_ip()
 
     # Allow TEST events to pass without needing full fields
     if event_type == "TEST":
         logging.info(
-            f"Received TEST event from real_ip={real_ip}"
-            + (f", proxy_ip={proxy_ip}" if proxy_ip else "")
-            + f" at {datetime.utcnow().isoformat()}",
+            f"Received TEST event at {datetime.utcnow().isoformat()}",
             extra={"request_id": g.request_id}
         )
         return jsonify({"status": "test received", "request_id": g.request_id}), 200
@@ -250,8 +192,6 @@ def webhook():
         "trackers": trackers,
         "color": color_code,
         "emoji": emoji,
-        "remote_ip": real_ip,
-        "proxy_ip": proxy_ip,
         "timestamp": datetime.utcnow().isoformat(),
         "request_id": g.request_id
     }
@@ -269,20 +209,17 @@ def handle_qbitmanage():
     function = data.get('function', 'Unknown Task')
     result = data.get('result', 'Completed')
     summary = data.get('summary') or "No additional details."
-    real_ip, proxy_ip = get_client_ip()
 
     if function in ['run_start', 'run_end']:
         logging.info(
-            f"Suppressed notification for function: {function} from real_ip={real_ip}"
-            + (f", proxy_ip={proxy_ip}" if proxy_ip else "")
-            + f" at {datetime.utcnow().isoformat()}",
+            f"Suppressed notification for function: {function} at {datetime.utcnow().isoformat()}",
             extra={"request_id": g.request_id}
         )
         return '', 204
 
-    meta = FUNCTION_META.get(function, FUNCTION_META['default'])
-    emoji = meta['emoji']
-    color = meta['color']
+    # Always use 🧹 emoji and green color for all qbitmanage notifications
+    emoji = "🧹"
+    color = 3066993
 
     title = f"qbitmanage: `{function}`"
     body = f"**Result:** `{result}`\n\n{summary}"
@@ -294,8 +231,6 @@ def handle_qbitmanage():
         "summary": summary,
         "emoji": emoji,
         "color": color,
-        "remote_ip": real_ip,
-        "proxy_ip": proxy_ip,
         "timestamp": datetime.utcnow().isoformat(),
         "request_id": g.request_id
     }
