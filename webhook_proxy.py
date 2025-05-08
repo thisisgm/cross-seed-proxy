@@ -86,6 +86,34 @@ def webhook():
     
     return jsonify({"status": "forwarded", "apprise_response": status_code}), status_code
 
+@app.route('/qbitmanage', methods=['POST'])
+def handle_qbitmanage():
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON"}), 400
+    logging.info(f"Received qbitmanage webhook: {data}")
+
+    function = data.get('function', 'Unknown Task')
+    result = data.get('result', 'Completed')
+    summary = data.get('summary', '')
+
+    title = f"📦 qbitmanage: {function} completed"
+    body = f"**Result:** `{result}`\n\n{summary or 'No additional details.'}"
+
+    payload = {
+        "title": title,
+        "body": body
+    }
+
+    try:
+        resp = requests.post(APPRISE_URL, json=payload, timeout=5)
+        status_code = resp.status_code
+    except requests.RequestException as e:
+        logging.error(f"Failed to send qbitmanage notification: {e}")
+        status_code = 500
+
+    return jsonify({"status": "forwarded", "apprise_response": status_code}), status_code
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"}), 200
