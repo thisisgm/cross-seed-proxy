@@ -1,11 +1,9 @@
 version: '3.8'
 
 services:
-  cross-seed-proxy:
+  webhook-proxy:
     image: thisisgm/cross-seed-proxy:latest
     container_name: cross-seed-proxy
     ports:
       - "5000:5000"
-    environment:
-      - TZ=Etc/UTC
     restart: unless-stopped

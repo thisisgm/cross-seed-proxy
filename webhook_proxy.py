@@ -120,15 +120,13 @@ else:
 
 APPRISE_URL = "http://apprise-api:8000/notify/crossseed"
 
-startup_time = time()
-
 FUNCTION_META = {
     "run_start": {"emoji": "🏁", "color": 3447003},
     "run_end": {"emoji": "🏁", "color": 3447003},
-    "download": {"emoji": "📥", "color": 3066993},
     "upload": {"emoji": "📤", "color": 10197915},
     "check": {"emoji": "🔍", "color": 15844367},
-    "default": {"emoji": "📦", "color": 3066993},
+    "default": {"emoji": "🎯", "color": 3066993},
+    "cleanup_dirs": {"emoji": "🧹", "color": 3066993},
 }
 
 SUMMARY_LOOKUP = {
@@ -138,18 +136,6 @@ SUMMARY_LOOKUP = {
     "UNKNOWN": "Event status unknown.",
 }
 
-last_request_time = 0
-
-metrics = {
-    "total_requests": 0,
-    "successful_sends": 0,
-    "failed_sends": 0,
-    "last_event": {
-        "webhook": None,
-        "qbitmanage": None
-    },
-    "last_request_duration": 0.0
-}
 
 def auth_required(f):
     # Decorator does nothing; all endpoints are public.
@@ -178,7 +164,6 @@ def send_discord_notification(title: str, description: str, emoji: str, color: i
             status_code = resp.status_code
             if 200 <= status_code < 300:
                 logging.info(f"Apprise response status code: {status_code} on attempt {attempt + 1}", extra={"request_id": g.request_id})
-                metrics["successful_sends"] += 1
                 break
             else:
                 logging.warning(f"Apprise returned status code {status_code} on attempt {attempt + 1}", extra={"request_id": g.request_id})
@@ -188,24 +173,17 @@ def send_discord_notification(title: str, description: str, emoji: str, color: i
             sleep(backoffs[attempt])
     else:
         logging.error(f"Failed to send notification after 3 attempts, final status code: {status_code}", extra={"request_id": g.request_id})
-        metrics["failed_sends"] += 1
 
     return status_code
 
 @app.before_request
-def limit_remote_addr():
-    global last_request_time
+def before_request():
     g.request_id = str(uuid.uuid4())
     g.start_time = time()
-    now = g.start_time
-    if now - last_request_time < 0.2:
-        return jsonify({"error": "Too many requests", "request_id": g.request_id}), 429
-    last_request_time = now
 
 @app.after_request
 def after_request(response):
     duration = time() - g.start_time
-    metrics["last_request_duration"] = duration
     logging.info(f"Request to {request.path} took {duration:.4f} seconds", extra={"request_id": g.request_id})
     # Add request_id header to response for traceability
     response.headers["X-Request-ID"] = g.request_id
@@ -213,9 +191,6 @@ def after_request(response):
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    metrics["total_requests"] += 1
-    metrics["last_event"]["webhook"] = datetime.utcnow().isoformat()
-
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Invalid or missing JSON", "request_id": g.request_id}), 400
@@ -236,17 +211,17 @@ def webhook():
     extra = data.get("extra", {})
     result = extra.get("result", "UNKNOWN")
 
-    title = "🎯 cross-seed match injected!"
+    title = "cross-seed match injected!"
     color_code = 3066993  # Default green
 
     if result == "FAILURE":
-        title = "❌ cross-seed injection failed!"
+        title = "cross-seed injection failed!"
         color_code = 15158332  # Red
     elif result == "SAVED":
-        title = "💾 cross-seed torrent saved!"
+        title = "cross-seed torrent saved!"
         color_code = 10197915  # Blue
     elif result == "UNKNOWN":
-        title = "❓ cross-seed injection status unknown"
+        title = "cross-seed injection status unknown"
         color_code = 9807270  # Greyish
 
     summary = SUMMARY_LOOKUP.get(result, "No additional information available.")
@@ -287,9 +262,6 @@ def webhook():
 
 @app.route('/qbitmanage', methods=['POST'])
 def handle_qbitmanage():
-    metrics["total_requests"] += 1
-    metrics["last_event"]["qbitmanage"] = datetime.utcnow().isoformat()
-
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Invalid or missing JSON", "request_id": g.request_id}), 400
@@ -333,91 +305,6 @@ def handle_qbitmanage():
     return jsonify({"status": "forwarded", "apprise_response": status_code, "request_id": g.request_id}), status_code
 
 
-# --- Health, readiness, and startup endpoints for Docker/Kubernetes probes ---
-@app.route('/health', methods=['GET'])
-def health():
-    # Legacy health endpoint, returns OK if app is running
-    return jsonify({"status": "ok", "request_id": g.request_id}), 200
-
-@app.route('/ready', methods=['GET'])
-def ready():
-    # Readiness probe: always ready if server is up
-    return jsonify({"status": "ready", "request_id": g.request_id}), 200
-
-@app.route('/startup', methods=['GET'])
-def startup_probe():
-    # Startup probe: returns 200 if server has booted and startup_time is set
-    return jsonify({
-        "status": "started",
-        "startup_time": datetime.utcfromtimestamp(startup_time).isoformat() + "Z",
-        "request_id": g.request_id
-    }), 200
-
-@app.route('/metrics', methods=['GET'])
-@auth_required
-def metrics_endpoint():
-    response = metrics.copy()
-    response["request_id"] = g.request_id
-    return jsonify(response), 200
-
-@app.route('/metrics/prometheus', methods=['GET'])
-@auth_required
-def metrics_prometheus():
-    def iso_to_unix(timestamp):
-        if timestamp is None:
-            return 0
-        try:
-            dt = datetime.fromisoformat(timestamp)
-            return int(dt.timestamp())
-        except Exception:
-            return 0
-
-    failed_send_alert = 1 if metrics["failed_sends"] > 5 else 0
-    slow_request_alert = 1 if metrics["last_request_duration"] > 2.0 else 0
-
-    prometheus_metrics = [
-        f'proxy_total_requests {metrics["total_requests"]}',
-        f'proxy_successful_sends {metrics["successful_sends"]}',
-        f'proxy_failed_sends {metrics["failed_sends"]}',
-        f'proxy_last_event_timestamp_seconds{{event="webhook"}} {iso_to_unix(metrics["last_event"]["webhook"])}',
-        f'proxy_last_event_timestamp_seconds{{event="qbitmanage"}} {iso_to_unix(metrics["last_event"]["qbitmanage"])}',
-        f'proxy_last_request_duration_seconds {metrics["last_request_duration"]:.6f}',
-        f'proxy_failed_send_alert{{threshold="5"}} {failed_send_alert}',
-        f'proxy_slow_request_alert{{threshold="2.0"}} {slow_request_alert}'
-    ]
-    resp = Response("\n".join(prometheus_metrics) + "\n", mimetype="text/plain; version=0.0.4")
-    resp.headers["X-Request-ID"] = g.request_id
-    return resp
-
-def mask_url(url):
-    # Simple masking: show scheme and host, mask path/query
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        masked_path = "/***masked***"
-        masked_url = f"{parsed.scheme}://{parsed.netloc}{masked_path}"
-        return masked_url
-    except Exception:
-        return "***masked***"
-
-@app.route('/debug', methods=['GET'])
-@auth_required
-def debug():
-    current_time = time()
-    uptime_seconds = current_time - startup_time
-    sanitized_config = {
-        "APPRISE_URL": mask_url(APPRISE_URL)
-    }
-    debug_info = {
-        "uptime_seconds": uptime_seconds,
-        "startup_time_iso": datetime.utcfromtimestamp(startup_time).isoformat() + "Z",
-        "current_time_iso": datetime.utcnow().isoformat(),
-        "active_config": sanitized_config,
-        "metrics": metrics,
-        "request_id": g.request_id
-    }
-    return jsonify(debug_info), 200
-
 if __name__ == '__main__':
-    logging.info(f"Container booted at {datetime.utcfromtimestamp(startup_time).isoformat()}Z", extra={"request_id": "N/A"})
+    logging.info(f"Container booted at {datetime.utcnow().isoformat()}Z", extra={"request_id": "N/A"})
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
