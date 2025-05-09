@@ -181,8 +181,7 @@ def webhook():
     body = (
         f"**Torrent:** {torrent_name}\n"
         f"**Trackers:** {trackers}\n\n"
-        f"**Status:** {result}\n"
-        f"**Summary:** {summary}"
+        f"**Status:** ✅ {result}"
     )
 
     log_data = {
@@ -222,13 +221,12 @@ def handle_qbitmanage():
     color = 3066993
 
     title = f"qbitmanage: `{function}`"
-    body = f"**Result:** `{result}`\n\n{summary}"
+    body = f"**Result:** ✅ {result}"
 
     log_data = {
         "event": "qbitmanage_webhook",
         "function": function,
         "result": result,
-        "summary": summary,
         "emoji": emoji,
         "color": color,
         "timestamp": datetime.utcnow().isoformat(),
